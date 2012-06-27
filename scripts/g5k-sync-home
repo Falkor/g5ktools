@@ -266,14 +266,14 @@ while [ $# -ge 1 ]; do
             SRC_BASEDIR="${BASEDIR}"
             DST_BASEDIR="${BASEDIR}";;
         -r | --retrieve) # in this case, retrieve the data from the remote site
-            [ $ALL_MODE -ne 0] && print_error_and_exit "Cannot go in retrieve mode when all nodes are selected "
+            [ $ALL_MODE -ne 0 ] && print_error_and_exit "Cannot go in retrieve mode when all nodes are selected "
             [ -z "${QUIET_MODE}" ] && warning "You choose to retrieve data from the remote ${REMOTE_SITE} site."
             RETRIEVE_MODE=1
             SRC_BASEDIR="${BASEDIR}"
             DST_BASEDIR="${BASEDIR}";;
         -v | --verbose)  VERBOSE="--verbose";;
         -n | --dry-run)  SIMULATION="--dry-run";;
-        *)  [ "${RETRIEVE_MODE}" -eq "1" ] && print_error_and_exit "You cannot specify manually the directories to synchronize in retrieve mode"
+        *)  #[ "${RETRIEVE_MODE}" -eq "1" ] && print_error_and_exit "You cannot specify manually the directories to synchronize in retrieve mode"
             SRC_BASEDIR="${BASEDIR}/${USER}"
             DST_BASEDIR="${BASEDIR}/${USER}"
             SYNC_ITEMS="$@"
@@ -316,7 +316,7 @@ do
             [ "${RETRIEVE_MODE}" -eq "0" ] && dest="${USER}@${REMOTE_SITE}:$dest" || src="${USER}@${REMOTE_SITE}:$src"
             info "synchronizing ${COLOR_CYAN}$src${COLOR_BACK} \t (on $dest)"
             really_continue
-            execute "rsync --rsh='ssh -p ${SSH_PORT}' ${EXCLUDE_OPT} ${VERBOSE} ${SIMULATION} -az ${SYNC_MODE} --relative $src $dest"
+            execute "rsync --rsh='ssh -p ${SSH_PORT}' ${EXCLUDE_OPT} ${VERBOSE} ${SIMULATION} -avz ${SYNC_MODE} --relative $src $dest"
         done
     fi
 done
