@@ -12,11 +12,35 @@ In particular:
  		(yoursite)$> ssh-keygen -t dsa
 		(yoursite)$> cat ~/.ssh/id_dsa.pub >> ~/.ssh/authorized_keys
 
- Once you have synchronize the `~/.ssh/` directory between the sites, you're ready to use this script.
+ Now you have to synchronize the `~/.ssh/` directory between the sites, typically by issuing:
+
+		(yoursite)$> g5k-sync-home all .ssh
 
 Now comes the detailed description of the proposed tools.
 
-## g5k-sync-home
+# Installation
+
+* Setup the directories to host these files: 
+
+		$> cd $HOME
+		$> mkdir -p bin git/github.com/Falkor 
+		
+* Clone the repository - you perhaps also want to clone my `dotfiles` repository:
+
+		$> cd git/github.com/Falkor
+		$> git clone https://github.com/Falkor/g5ktools.git
+		$> git clone https://github.com/Falkor/dotfiles.git
+
+* Create the appropriate links:
+
+		$> cd ~/bin
+		$> ln -s ../git/github.com/Falkor/g5ktools/scripts/g5k-sync-home .
+
+* Setup the `dotfiles`: see [Installation notes on Github](https://github.com/Falkor/dotfiles)
+
+# Description of the `g5ktools` scripts
+
+## == `g5k-sync-home` ==
 
 
 		NAME
