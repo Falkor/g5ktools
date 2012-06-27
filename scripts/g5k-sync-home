@@ -1,0 +1,323 @@
+#!/bin/bash
+################################################################################
+# g5k-sync-home -  Synchronize all or part of your Grid5000 homedirs between the
+# different g5k sites.  
+#
+# Copyright (c) 2009 Sebastien Varrette <Sebastien.Varrette@uni.lu>
+#               http://varrette.gforge.uni.lu
+# Description : see the print_help function or launch 'g5k-sync-home --help'
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+################################################################################
+
+### Global variables
+VERSION=0.1
+COMMAND=`basename $0`
+VERBOSE=""
+DEBUG=""
+SIMULATION=""
+SYNC_MODE="--update"      # By default, update directories, don't delete obsolete files/dirs
+RETRIEVE_MODE=0           # By default, push data on the other cluster and don't retrive anything
+ALL_MODE=0                # By default, don't synchronize on all sites
+
+### displayed colors
+COLOR_GREEN="\033[0;32m"
+COLOR_RED="\033[0;31m"
+COLOR_YELLOW="\033[0;33m"
+COLOR_VIOLET="\033[0;35m"
+COLOR_CYAN="\033[0;36m"
+COLOR_BOLD="\033[1m"
+COLOR_BACK="\033[0m"
+
+### Local variables
+
+# user management
+USER=`whoami`
+HOMEDIR="/home/`whoami`"
+
+# UL clusters access
+SSH_PORT=22
+LOCAL_SITE=`hostname -f | cut -d '.' -f 2`
+REMOTE_SITE=''
+
+# Where the directories to rsync are located, either on the local machine or the
+# remote backup server 
+BASEDIR="/home"
+RSYNC_EXCLUDEFILE="$HOME/.rsync_exclude"  # the file containing the patterns of file not to be rsynced
+EXCLUDE_OPT=""                            # do not modify
+
+# By default, rsync the following directories (relatives to a BASEDIR). By default, the full homedir
+# Use space to separate each entry and just forget the last / at the end of each label
+SYNC_ITEMS="${USER}"
+
+# By default, update files on the backup server
+SRC_BASEDIR="${BASEDIR}"
+DST_BASEDIR="${BASEDIR}"
+
+# Log file -- NOT USED YET
+LOG_FILE="$HOME/sync_backup.log"
+
+#######################
+### print functions ###
+#######################
+####
+# print version of this program
+##
+print_version() {
+    cat <<EOF
+This is $COMMAND version "$VERSION".
+Copyright (c) 2009 Sebastien Varrette  (http://varrette.gforge.uni.lu)
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+EOF
+}
+
+####
+# print help
+##
+print_help() {
+    cat <<EOF
+NAME
+
+    $COMMAND -- Synchronize the homedir (or any item relative to your homedir)
+    between the different sites of Grid5000
+
+SYNOPSIS
+
+    $COMMAND [-V | -h]
+    $COMMAND <site|all> [--debug] [-v] [-n] [--delete] [--retrieve|--push] [item1...]
+
+DESCRIPTION
+
+    $COMMAND synchronize your files and directory (inside your homedir) between
+    the G5K sites using rsync. Example: 
+
+         # upload $HOME/data from Luxembourg to nancy (simulate)
+         (luxembourg)$> $COMMAND nancy --dry-run data
+
+         # synchonize your full homedir with all other sites:
+         (luxembourg)$> $COMMAND all --dry-run
+
+         # retrieve the $HOME/toto from rennes
+         (luxembourg)$> $COMMAND rennes --retrieve toto
+
+OPTIONS
+
+    --delete      Causes $COMMAND to delete files on the target if absent in the
+                  original directory. This ensure an exact replica but you may
+                  loose files so use this option with caution.
+    --debug       Debug mode. Causes $COMMAND to print debugging messages.
+    -h --help     Display a help screen and quit.
+    -n --dry-run  Simulation mode.
+    -p ---push    Push mode (default). rsync local homedir on the remote site.
+    -r --retrieve Retrieve mode. rsync from the remote site into your local homedir.
+    -v --verbose  Verbose mode.
+    -V --version  Display the version number then quit.
+
+AUTHOR
+
+    Sebastien Varrette <Sebastien.Varrette@uni.lu>
+    Web page: http://varrette.gforge.uni.lu
+
+REPORTING BUGS
+
+    Please report bugs using the tracker system available
+    [here](https://github.com/Falkor/g5ktools/issues). Feel free also to contact
+    me <Sebastien.Varrette@uni.lu> for comments. You can also use the 
+
+COPYRIGHT
+    This is free software; see the source for copying conditions.  There is
+    NO warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR
+    PURPOSE.
+
+RESOURCES
+    The latest version of this script is available on [Github](https://github.com/Falkor/g5ktools)
+EOF
+}
+
+######
+# Print information in the following form: '[$2] $1' ($2=INFO if not submitted)
+# usage: info text [title]
+##
+info() {
+    [ -z "$1" ] && print_error_and_exit "[$FUNCNAME] missing text argument"
+    local text=$1
+    local title=$2
+    # add default title if not submitted but don't print anything
+    [ -n "$text" ] && text="${title:==>} $text"
+    echo -e $text
+}
+debug()   { [ -n "$DEBUG"   ] && info "$1" "[${COLOR_YELLOW}DEBUG${COLOR_BACK}]"; }
+verbose() { [ -n "$VERBOSE" ] && info "$1"; }
+error()   { info "$1" "[${COLOR_RED}ERROR${COLOR_BACK}]"; }
+warning() { info "$1" "[${COLOR_VIOLET}WARNING${COLOR_BACK}]"; }
+print_error_and_exit() {
+    local text=$1
+    [ -z "$1" ] && text=" Bad format"
+    error  "$text. '$COMMAND -h' for help."
+    exit 1
+}
+#####
+# print the strings [ OK ] or [ FAILED ] or [ FAILED ]\n$1
+##
+print_ok()     { echo -e "[   ${COLOR_GREEN}OK${COLOR_BACK}   ]"; }
+print_failed() { echo -e "[ ${COLOR_RED}FAILED${COLOR_BACK} ]"; }
+print_failed_and_exit() {
+    print_failed
+    [ ! -z "$1" ] && echo "$1"
+    exit 1
+}
+
+#########################
+### toolbox functions ###
+#########################
+
+#####
+# execute a local command
+# usage: execute command
+###
+execute() {
+    [ $# -eq 0 ] && print_error_and_exit "[$FUNCNAME] missing command argument"
+    debug "[$FUNCNAME] $*"
+    [ -n "${SIMULATION}" ] && echo "(simulation) $*" || eval $*
+    local exit_status=$?
+    debug "[$FUNCNAME] exit status: $exit_status"
+    return $exit_status
+}
+
+#####
+# execute a remote command
+# usage: remote_execute command
+###
+remote_execute() {
+    [ $# -eq 0 ] && print_error_and_exit "[$FUNCNAME] missing command argument"
+    local cmd="ssh -p ${SSH_PORT} ${USER}@${REMOTE_SERVER} $* 1>/dev/null"
+    debug "[$FUNCNAME] $cmd"
+    eval $cmd
+}
+
+####
+# ask to continue. exit 1 if the answer is no
+# usage: really_continue text
+##
+really_continue() {
+    echo -e -n "[${COLOR_VIOLET}WARNING${COLOR_BACK}] $1 Are you sure you want to continue? [Y|n] "
+    read ans
+    case $ans in
+        n*|N*) exit 1;;
+    esac
+}
+
+#####
+# Check availability of binaries passed as arguments on the current system
+# usage: check_bin prog1 prog2 ...
+##
+check_binary() {
+    [ $# -eq 0 ] && print_error_and_exit "[$FUNCNAME] missing argument"
+    for appl in $*; do
+        echo -n -e "=> checking availability of the command '$appl' on your system \t"
+        local tmp=`which $appl`
+        [ -z "$tmp" ] && print_failed_and_exit "Please install $appl or check \$PATH." || print_ok
+    done
+}
+
+################################################################################
+################################################################################
+#[ $UID -gt 0 ] && print_error_and_exit "You must be root to execute this script (current uid: $UID)"
+
+# Get the target site of the synchronization process
+case $1 in
+    -h | --help)    print_help;        exit 0;;
+    -V | --version) print_version;     exit 0;;
+    all)
+        ALL_MODE=1;
+        site_array=( bordeaux grenoble lille luxembourg lyon nancy reims rennes sophia toulouse);;
+    bordeaux|grenoble|lille|luxembourg|lyon|nancy|reims|rennes|sophia|toulouse)
+        REMOTE_SITE=$1;
+        site_array=( $1 );;
+    *) echo "Usage: $COMMAND <sitename|all> [options] pattern"; exit 1;;
+esac
+shift
+
+# Now parse the options and/or the patterns of the items to synchronize
+while [ $# -ge 1 ]; do
+    case $1 in
+        -h | --help)    print_help;        exit 0;;
+        -V | --version) print_version;     exit 0;;
+        --delete)
+            [ -z "${QUIET_MODE}" ] && warning "This option force an exact duplication and can lead to deletion of files."
+            SYNC_MODE="--delete";;
+        --debug)
+            DEBUG="--debug";
+            VERBOSE="--verbose";;
+        -p | --push)     # (the default) push data on the remote site
+            RETRIEVE_MODE=0
+            SRC_BASEDIR="${BASEDIR}"
+            DST_BASEDIR="${BASEDIR}";;
+        -r | --retrieve) # in this case, retrieve the data from the remote site
+            [ $ALL_MODE -ne 0] && print_error_and_exit "Cannot go in retrieve mode when all nodes are selected "
+            [ -z "${QUIET_MODE}" ] && warning "You choose to retrieve data from the remote ${REMOTE_SITE} site."
+            RETRIEVE_MODE=1
+            SRC_BASEDIR="${BASEDIR}"
+            DST_BASEDIR="${BASEDIR}";;
+        -v | --verbose)  VERBOSE="--verbose";;
+        -n | --dry-run)  SIMULATION="--dry-run";;
+        *)  [ "${RETRIEVE_MODE}" -eq "1" ] && print_error_and_exit "You cannot specify manually the directories to synchronize in retrieve mode"
+            SRC_BASEDIR="${BASEDIR}/${USER}"
+            DST_BASEDIR="${BASEDIR}/${USER}"
+            SYNC_ITEMS="$@"
+            break;;
+    esac
+    shift
+done
+
+# check for the exclude file
+if [ -n "${RSYNC_EXCLUDEFILE}" ]; then
+    # if this variable if precised, check the existence of the file
+    if [ -f "${RSYNC_EXCLUDEFILE}" ]; then
+        EXCLUDE_OPT="--exclude-from=${RSYNC_EXCLUDEFILE}"
+    fi
+fi
+
+# Finally, do the rsync
+for (( idx = 0 ; idx < ${#site_array[@]} ; idx++ ))
+do
+    REMOTE_SITE=${site_array[$idx]}
+    if [ "${REMOTE_SITE}" != "${LOCAL_SITE}" ]; then
+
+        info "about to synchronize ${COLOR_BOLD}from${COLOR_BACK} ${LOCAL_SITE} ${COLOR_BOLD}to${COLOR_BACK} ${REMOTE_SITE}"
+        if [ "${RETRIEVE_MODE}" -eq "0" ]; then
+            echo -e "\tSource:      ${SRC_BASEDIR}"
+            echo -e "\tDestination: ${USER}@${REMOTE_SITE}:${DST_BASEDIR}"
+        else
+            echo -e "\tSource:      ${USER}@${REMOTE_SITE}:${SRC_BASEDIR}"
+            echo -e "\tDestination: ${DST_BASEDIR}"
+        fi
+        echo -e "\tItems to synchronize: ${SYNC_ITEMS}"
+        if [ "${SYNC_MODE}" == "--delete" ]; then
+            warning "--delete ${COLOR_RED}force${COLOR_BACK} an exact replication this ${COLOR_RED}will lead to deletion of files on the target.${COLOR_BACK}"
+        fi
+        really_continue
+        for item in ${SYNC_ITEMS}; do
+            [ -d "${SRC_BASEDIR}/$item" ] && src="${SRC_BASEDIR}/./$item/" || src="${SRC_BASEDIR}/./$item"
+    #dest="${DST_BASEDIR}/$item"
+            dest="${DST_BASEDIR}"
+            [ "${RETRIEVE_MODE}" -eq "0" ] && dest="${USER}@${REMOTE_SITE}:$dest" || src="${USER}@${REMOTE_SITE}:$src"
+            info "synchronizing ${COLOR_CYAN}$src${COLOR_BACK} \t (on $dest)"
+            really_continue
+            execute "rsync --rsh='ssh -p ${SSH_PORT}' ${EXCLUDE_OPT} ${VERBOSE} ${SIMULATION} -az ${SYNC_MODE} --relative $src $dest"
+        done
+    fi
+done
+
