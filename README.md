@@ -6,10 +6,15 @@ In particular:
 * `g5k-sync-home`: a synchonization script based on `rsync` that permit to easily
   backup/restore part or all your homedir data between the different sites of
   [Grid5000](http//www.grid5000.fr). 
-  
-  
-Now comes the detailed description of the proposed tools.
 
+ Note that this assumes you are able to connect by SSH between each site. You can easily achieve that by generating an SSH keypair:
+
+ 		(yoursite)$> ssh-keygen -t dsa
+		(yoursite)$> cat ~/.ssh/id_dsa.pub >> ~/.ssh/authorized_keys
+
+ Once you have synchronize the `~/.ssh/` directory between the sites, you're ready to use this script.
+
+Now comes the detailed description of the proposed tools.
 
 ## g5k-sync-home
 
@@ -66,4 +71,4 @@ Now comes the detailed description of the proposed tools.
 
 # Licence
 
-See the `DISCLAIMER` file. 
+The proposed scripts are available under the GPL licence -- see the `DISCLAIMER` file. 
