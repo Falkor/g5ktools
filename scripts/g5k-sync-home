@@ -31,6 +31,9 @@ SYNC_MODE="--update"      # By default, update directories, don't delete obsolet
 RETRIEVE_MODE=0           # By default, push data on the other cluster and don't retrive anything
 ALL_MODE=0                # By default, don't synchronize on all sites
 
+SITEIGNORE="$HOME/.siteignore" # Eventually list here the sites to ignore (for
+                               # maintenance reasons typically)
+
 ### displayed colors
 COLOR_GREEN="\033[0;32m"
 COLOR_RED="\033[0;31m"
@@ -294,8 +297,19 @@ fi
 for (( idx = 0 ; idx < ${#site_array[@]} ; idx++ ))
 do
     REMOTE_SITE=${site_array[$idx]}
-    if [ "${REMOTE_SITE}" != "${LOCAL_SITE}" ]; then
+    # Check .siteignore site
+    if [ -f "${SITEIGNORE}" ]; then
+        if [ -n "`grep ${REMOTE_SITE} ${SITEIGNORE}`" ]; then 
+            echo " "
+            error "Ignoring '${REMOTE_SITE}' site as it is listed in
+${SITEIGNORE}"
+            continue
+        fi 
+    fi 
 
+    if [ "${REMOTE_SITE}" != "${LOCAL_SITE}" ]; then
+        echo " "
+        echo "===================================================================="
         info "about to synchronize ${COLOR_BOLD}from${COLOR_BACK} ${LOCAL_SITE} ${COLOR_BOLD}to${COLOR_BACK} ${REMOTE_SITE}"
         if [ "${RETRIEVE_MODE}" -eq "0" ]; then
             echo -e "\tSource:      ${SRC_BASEDIR}"
@@ -308,7 +322,7 @@ do
         if [ "${SYNC_MODE}" == "--delete" ]; then
             warning "--delete ${COLOR_RED}force${COLOR_BACK} an exact replication this ${COLOR_RED}will lead to deletion of files on the target.${COLOR_BACK}"
         fi
-        really_continue
+        #really_continue
         for item in ${SYNC_ITEMS}; do
             [ -d "${SRC_BASEDIR}/$item" ] && src="${SRC_BASEDIR}/./$item/" || src="${SRC_BASEDIR}/./$item"
     #dest="${DST_BASEDIR}/$item"
