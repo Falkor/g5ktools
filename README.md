@@ -96,3 +96,15 @@ Now comes the detailed description of the proposed tools.
 # Licence
 
 The proposed scripts are available under the GPL licence -- see the `DISCLAIMER` file. 
+
+# General Grid5000 tips
+
+You can find below interesting links providing information for a better usage of Grid5000:
+
+* [G5K Tips by ASCOLA](http://www.emn.fr/z-info/ascola/doku.php?id=internet:members:fquesnel:g5k_tips)
+* [Working efficiently on Grid’5000](https://www.grid5000.fr/school2010/slides/g5kss10-grid5000-efficiently.pdf), a very nice talk by Lucas
+* [Towards better experiments on Grid’5000](http://www.loria.fr/~lnussbau/files/renpar11-grid5000.pdf), yet another nice talk by Lucas ;)
+* [Large scale tips](https://www.grid5000.fr/mediawiki/index.php/Large_scale_tips)
+
+
+
