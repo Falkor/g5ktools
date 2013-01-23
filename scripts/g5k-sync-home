@@ -1,7 +1,7 @@
 #!/bin/bash
 ################################################################################
 # g5k-sync-home -  Synchronize all or part of your Grid5000 homedirs between the
-# different g5k sites.  
+# different g5k sites.
 #
 # Copyright (c) 2009 Sebastien Varrette <Sebastien.Varrette@uni.lu>
 #               http://varrette.gforge.uni.lu
@@ -30,6 +30,7 @@ SIMULATION=""
 SYNC_MODE="--update"      # By default, update directories, don't delete obsolete files/dirs
 RETRIEVE_MODE=0           # By default, push data on the other cluster and don't retrive anything
 ALL_MODE=0                # By default, don't synchronize on all sites
+YES_MODE=""               # By default, ask questions
 
 SITEIGNORE="$HOME/.siteignore" # Eventually list here the sites to ignore (for
                                # maintenance reasons typically)
@@ -55,7 +56,7 @@ LOCAL_SITE=`hostname -f | cut -d '.' -f 2`
 REMOTE_SITE=''
 
 # Where the directories to rsync are located, either on the local machine or the
-# remote backup server 
+# remote backup server
 BASEDIR="/home"
 RSYNC_EXCLUDEFILE="$HOME/.rsync_exclude"  # the file containing the patterns of file not to be rsynced
 EXCLUDE_OPT=""                            # do not modify
@@ -99,12 +100,12 @@ NAME
 SYNOPSIS
 
     $COMMAND [-V | -h]
-    $COMMAND <site|all> [--debug] [-v] [-n] [--delete] [--retrieve|--push] [item1...]
+    $COMMAND <site|all> [--yes] [--debug] [-v] [-n] [--delete] [--retrieve|--push] [item1...]
 
 DESCRIPTION
 
     $COMMAND synchronize your files and directory (inside your homedir) between
-    the G5K sites using rsync. Example: 
+    the G5K sites using rsync. Example:
 
          # upload $HOME/data from Luxembourg to nancy (simulate)
          (luxembourg)$> $COMMAND nancy --dry-run data
@@ -121,6 +122,7 @@ OPTIONS
                   original directory. This ensure an exact replica but you may
                   loose files so use this option with caution.
     --debug       Debug mode. Causes $COMMAND to print debugging messages.
+    --yes         Don't ask questions
     -h --help     Display a help screen and quit.
     -n --dry-run  Simulation mode.
     -p ---push    Push mode (default). rsync local homedir on the remote site.
@@ -137,7 +139,7 @@ REPORTING BUGS
 
     Please report bugs using the tracker system available
     [here](https://github.com/Falkor/g5ktools/issues). Feel free also to contact
-    me <Sebastien.Varrette@uni.lu> for comments. You can also use the 
+    me <Sebastien.Varrette@uni.lu> for comments. You can also use the
 
 COPYRIGHT
     This is free software; see the source for copying conditions.  There is
@@ -215,11 +217,13 @@ remote_execute() {
 # usage: really_continue text
 ##
 really_continue() {
-    echo -e -n "[${COLOR_VIOLET}WARNING${COLOR_BACK}] $1 Are you sure you want to continue? [Y|n] "
-    read ans
-    case $ans in
-        n*|N*) exit 1;;
-    esac
+    if [ -z "${YES_MODE}" ]; then
+        echo -e -n "[${COLOR_VIOLET}WARNING${COLOR_BACK}] $1 Are you sure you want to continue? [Y|n] "
+        read ans
+        case $ans in
+            n*|N*) exit 1;;
+        esac
+    fi 
 }
 
 #####
@@ -259,18 +263,20 @@ while [ $# -ge 1 ]; do
         -h | --help)    print_help;        exit 0;;
         -V | --version) print_version;     exit 0;;
         --delete)
-            [ -z "${QUIET_MODE}" ] && warning "This option force an exact duplication and can lead to deletion of files."
+            [ -z "${YES_MODE}" ] && warning "This option force an exact duplication and can lead to deletion of files."
             SYNC_MODE="--delete";;
         --debug)
             DEBUG="--debug";
             VERBOSE="--verbose";;
+        --yes)
+            YES_MODE="--quiet";;
         -p | --push)     # (the default) push data on the remote site
             RETRIEVE_MODE=0
             SRC_BASEDIR="${BASEDIR}"
             DST_BASEDIR="${BASEDIR}";;
         -r | --retrieve) # in this case, retrieve the data from the remote site
             [ $ALL_MODE -ne 0 ] && print_error_and_exit "Cannot go in retrieve mode when all nodes are selected "
-            [ -z "${QUIET_MODE}" ] && warning "You choose to retrieve data from the remote ${REMOTE_SITE} site."
+            [ -z "${YES_MODE}" ] && warning "You choose to retrieve data from the remote ${REMOTE_SITE} site."
             RETRIEVE_MODE=1
             SRC_BASEDIR="${BASEDIR}"
             DST_BASEDIR="${BASEDIR}";;
@@ -299,13 +305,13 @@ do
     REMOTE_SITE=${site_array[$idx]}
     # Check .siteignore site
     if [ -f "${SITEIGNORE}" ]; then
-        if [ -n "`grep ${REMOTE_SITE} ${SITEIGNORE}`" ]; then 
+        if [ -n "`grep ${REMOTE_SITE} ${SITEIGNORE}`" ]; then
             echo " "
             error "Ignoring '${REMOTE_SITE}' site as it is listed in
 ${SITEIGNORE}"
             continue
-        fi 
-    fi 
+        fi
+    fi
 
     if [ "${REMOTE_SITE}" != "${LOCAL_SITE}" ]; then
         echo " "
@@ -334,4 +340,3 @@ ${SITEIGNORE}"
         done
     fi
 done
-
